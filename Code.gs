@@ -15,7 +15,7 @@ const HEAD = {
 };
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index').setTitle('Shipment photos')
+  return HtmlService.createHtmlOutputFromFile('Index').setTitle('Pet Friend Shipments')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 /** JSON API for the hosted PWA (POST body is text/plain JSON: {fn, args}). */
