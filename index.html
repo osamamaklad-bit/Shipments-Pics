@@ -35,7 +35,7 @@ button{cursor:pointer}button.p{background:var(--acc);border-color:var(--acc);col
 <div id="msg" class="msg"></div>
 </div>
 <script>
-const API_URL='PASTE_YOUR_APPS_SCRIPT_/exec_URL_HERE';
+const API_URL='https://script.google.com/macros/s/AKfycbxCt3AtTpBYGvVmicXQqvrPXNKkVCU82GdjSPIo5SWBfdD5N9b7wbByvUmCwR_fF6rv/exec';
 function api(fn,args){return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fn,args})}).then(r=>r.json()).then(j=>{if(j.error)throw new Error(j.error);return j.result})}
 const google={script:{get run(){let ok=()=>{},bad=()=>{};const o=new Proxy({},{get:(_,k)=>k==='withSuccessHandler'?f=>(ok=f,o):k==='withFailureHandler'?f=>(bad=f,o):(...a)=>{api(k,a).then(ok).catch(bad)}});return o}}};
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
