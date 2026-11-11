@@ -20,7 +20,7 @@ function doGet() {
 }
 /** JSON API for the hosted PWA (POST body is text/plain JSON: {fn, args}). */
 function doPost(e) {
-  const fns = { saveShipment: saveShipment, getShipment: getShipment };
+  const fns = { saveShipment: saveShipment, getShipment: getShipment, checkPin: checkPin };
   let out;
   try {
     const q = JSON.parse(e.postData.contents);
@@ -29,6 +29,7 @@ function doPost(e) {
   } catch (err) { out = { error: err.message }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
+function checkPin(pin) { pin_(pin); return true; }
 function sh_(name) {
   const ss = SpreadsheetApp.getActive() || SpreadsheetApp.openById(P.getProperty('SHEET_ID'));
   let s = ss.getSheetByName(name);
@@ -49,12 +50,17 @@ function findRow_(name, tn) {
 }
 
 /** photos: array of data URLs (jpeg) */
-function saveShipment(pin, tn, photos, note) {
-  pin_(pin); tn = String(tn).trim();
-  if (!/^\d{6,}$/.test(tn)) throw new Error('Tracking number must be digits only');
+function saveShipment(pin, tn, photos, note, force) {
+  pin_(pin); tn = String(tn).replace(/\D/g, '').slice(-10);
+  if (!/^\d{10}$/.test(tn)) throw new Error('Need at least 10 digits of the barcode');
   if (!photos || !photos.length) throw new Error('Add at least one photo');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
+    const r0 = findRow_('Tracking', tn);
+    if (r0 && !force && Number(sh_('Tracking').getRange(r0, 3).getValue()) > 0) {
+      const first = rows_('Shipments').find(x => String(x[1]) === tn);
+      return { duplicate: true, at: first ? Utilities.formatDate(new Date(first[0]), 'Africa/Cairo', 'dd MMM HH:mm') : '' };
+    }
     const user = Session.getActiveUser().getEmail() || 'app', now = new Date(), f = folder_();
     photos.forEach((d, i) => {
       const blob = Utilities.newBlob(Utilities.base64Decode(d.split(',')[1]), 'image/jpeg',
@@ -70,7 +76,7 @@ function saveShipment(pin, tn, photos, note) {
 }
 
 function getShipment(pin, tn) {
-  pin_(pin); tn = String(tn).trim();
+  pin_(pin); tn = String(tn).replace(/\D/g, '').slice(-10);
   const photos = rows_('Shipments').filter(r => String(r[1]) === tn).slice(-8).map(r => ({
     time: Utilities.formatDate(new Date(r[0]), 'Africa/Cairo', 'dd MMM HH:mm'), note: r[4], url: r[3],
     img: 'data:image/jpeg;base64,' + Utilities.base64Encode(DriveApp.getFileById(r[2]).getBlob().getBytes())
@@ -135,7 +141,7 @@ function importFromFees() {
   (function walk(o) {
     if (Array.isArray(o)) return o.forEach(walk);
     if (o && typeof o === 'object') Object.keys(o).forEach(k => {
-      if (/tracking/i.test(k) && /^\d{6,}$/.test(String(o[k]))) found[String(o[k])] = 1; else walk(o[k]);
+      if (/tracking/i.test(k) && /^\d{6,}$/.test(String(o[k]))) found[String(o[k]).slice(-10)] = 1; else walk(o[k]);
     });
   })(JSON.parse(res.getContentText()));
   const T = sh_('Tracking'), have = {};
@@ -143,13 +149,14 @@ function importFromFees() {
   const add = Object.keys(found).filter(tn => !have[tn]).map(tn => ["'" + tn, new Date(), 0, '', '', false]);
   if (add.length) T.getRange(T.getLastRow() + 1, 1, add.length, 6).setValues(add);
 }
-function syncBosta() {
-  try { importFromFees(); } catch (e) { console.error('importFromFees', e.message); }
+function syncBosta(only) {
+  if (!only) try { importFromFees(); } catch (e) { console.error('importFromFees', e.message); }
   const t0 = Date.now(), flag = new RegExp(P.getProperty('FLAG_REGEX') || 'bulky', 'i');
   const T = sh_('Tracking'), data = T.getDataRange().getValues();
   for (let i = 1; i < data.length && Date.now() - t0 < 300000; i++) {
-    if (data[i][5] === true) continue;
+    if (data[i][5] === true && !only) continue;
     const tn = String(data[i][0]);
+    if (only && tn !== only) continue;
     try {
       const d = bosta_(tn), p = pricing_(d), old = (Date.now() - new Date(data[i][1])) > 60 * 864e5;
       T.getRange(i + 1, 4, 1, 3).setValues([[d.state && d.state.value, p.size, p.final !== '' || old]]);
@@ -163,4 +170,13 @@ function syncBosta() {
       else B.appendRow(row);
     } catch (e) { console.error(tn, e.message); }
   }
+}
+
+/** TEST: run once from the editor. Uses a known Light Bulky shipment, then check the Tracking and Bulky sheets. */
+function testBulky() {
+  const tn = '9022895919', T = sh_('Tracking'), r = findRow_('Tracking', tn);
+  if (r) T.getRange(r, 6).setValue(false); else T.appendRow(["'" + tn, new Date(), 0, '', '', false]);
+  syncBosta(tn);
+  const b = rows_('Bulky').find(x => String(x[0]) === tn);
+  console.log(b ? 'BULKY ROW: ' + JSON.stringify(b.slice(0, 9)) : 'No Bulky row. Check the log above for the Bosta error.');
 }
