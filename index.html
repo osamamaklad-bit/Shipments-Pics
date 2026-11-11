@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shipment photos</title><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0b6b5d"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--bg:#f3f1ec;--ink:#1d2a2e;--mut:#6b7679;--card:#fff;--line:#d9d6cd;--acc:#0b6b5d;--warn:#b4531a}
+@media (prefers-color-scheme:dark){:root{--bg:#14191b;--ink:#e8ecea;--mut:#8d9a9c;--card:#1d2528;--line:#2e393c;--acc:#4cc2ae;--warn:#e8925a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:14px;max-width:560px;margin:auto}
+h1{font-size:20px;margin:0 0 12px}.tabs{display:flex;gap:8px;margin-bottom:12px}
+button,input{font:inherit;border-radius:8px;border:1px solid var(--line);padding:12px;background:var(--card);color:var(--ink)}
+button{cursor:pointer}button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.tabs button{flex:1}.tabs .on{border-color:var(--acc);color:var(--acc);font-weight:600}
+.row{display:flex;gap:8px;margin:8px 0}.row input{flex:1;min-width:0}input#tn{font-size:20px;letter-spacing:1px}
+#reader{width:100%}.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.thumbs img,.ph img{width:100%;border-radius:6px;display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.msg{margin:8px 0;color:var(--mut)}.bad{color:var(--warn)}.tag{font-weight:700;color:var(--warn)}pre{white-space:pre-wrap;margin:6px 0;font:inherit}
+.hide{display:none}
+</style></head><body>
+<h1>Shipment photos</h1>
+<div id="login" class="card hide"><input id="pin" type="password" inputmode="numeric" placeholder="PIN"><button class="p" onclick="setPin()" style="margin-top:8px;width:100%">Open</button></div>
+<div id="app" class="hide">
+<div class="tabs"><button id="t1" class="on" onclick="tab(1)">Save</button><button id="t2" onclick="tab(2)">Search</button></div>
+<div id="v1">
+  <div class="row"><input id="tn" inputmode="numeric" placeholder="Tracking number" onkeydown="if(event.key==='Enter')snap.click()"><button onclick="scan()">Scan</button></div>
+  <div id="reader"></div>
+  <div class="row"><button class="p" style="flex:1" onclick="snap.click()">Take photo</button></div>
+  <input id="snap" type="file" accept="image/*" capture="environment" multiple class="hide" onchange="addPhotos(this.files)">
+  <div class="thumbs" id="th"></div>
+  <input id="note" placeholder="Note (optional)" style="width:100%">
+  <button class="p" style="width:100%;margin-top:8px" id="sv" onclick="save()">Save shipment</button>
+</div>
+<div id="v2" class="hide">
+  <div class="row"><input id="q" inputmode="numeric" placeholder="Tracking number" onkeydown="if(event.key==='Enter')find()"><button class="p" onclick="find()">Search</button><button onclick="scan('q')">Scan</button></div>
+  <div id="res"></div>
+</div>
+<div id="msg" class="msg"></div>
+</div>
+<script>
+const API_URL='PASTE_YOUR_APPS_SCRIPT_/exec_URL_HERE';
+function api(fn,args){return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fn,args})}).then(r=>r.json()).then(j=>{if(j.error)throw new Error(j.error);return j.result})}
+const google={script:{get run(){let ok=()=>{},bad=()=>{};const o=new Proxy({},{get:(_,k)=>k==='withSuccessHandler'?f=>(ok=f,o):k==='withFailureHandler'?f=>(bad=f,o):(...a)=>{api(k,a).then(ok).catch(bad)}});return o}}};
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script>
+<script>
+let pin=localStorage.getItem('pin')||'', photos=[], qr=null;
+const $=id=>document.getElementById(id), say=(t,bad)=>{$('msg').textContent=t;$('msg').className='msg'+(bad?' bad':'')};
+function boot(){ if(pin){$('app').classList.remove('hide');$('login').classList.add('hide')} else $('login').classList.remove('hide') }
+function setPin(){pin=$('pin').value;try{localStorage.setItem('pin',pin)}catch(e){}boot()}
+function tab(n){[1,2].forEach(i=>{$('v'+i).classList.toggle('hide',i!==n);$('t'+i).classList.toggle('on',i===n)});say('')}
+function fail(e){say(e.message||String(e),true);$('sv').disabled=false;if(/PIN/.test(e.message||'')){pin='';try{localStorage.removeItem('pin')}catch(x){}boot()}}
+function shrink(file){return new Promise(ok=>{const im=new Image();im.onload=()=>{const s=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.7))};im.src=URL.createObjectURL(file)})}
+async function addPhotos(fs){
+  for(const f of fs){
+    photos.push(await shrink(f));
+    if(!$('tn').value){ try{ const r=new Html5Qrcode('reader'); const t=await r.scanFile(f,false); $('tn').value=t.replace(/\D/g,''); say('Tracking number read from the photo'); r.clear() }catch(e){} }
+  }
+  $('th').innerHTML=photos.map(p=>'<img src="'+p+'">').join(''); $('snap').value='';
+}
+async function scan(target){
+  const el=$(target||'tn'); say('Starting camera...');
+  try{ qr=new Html5Qrcode('reader'); await qr.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:120}},async t=>{el.value=t.replace(/\D/g,'');await qr.stop();qr.clear();say('Scanned '+el.value);if(target==='q')find()}) }
+  catch(e){ say('Camera blocked here. Take a photo of the label instead; the number is read from the photo.',true) }
+}
+function save(){
+  const tn=$('tn').value.trim(); if(!tn||!photos.length) return say('Add a tracking number and at least one photo',true);
+  $('sv').disabled=true; say('Saving...');
+  google.script.run.withSuccessHandler(r=>{say('Saved '+r.saved+' photo(s) for '+tn);photos=[];$('th').innerHTML='';$('tn').value='';$('note').value='';$('sv').disabled=false}).withFailureHandler(fail).saveShipment(pin,tn,photos,$('note').value)
+}
+function find(){
+  const tn=$('q').value.trim(); if(!tn) return; say('Searching...'); $('res').innerHTML='';
+  google.script.run.withSuccessHandler(r=>{ say('');
+    if(!r.photos.length&&!r.state) return say('Nothing saved for '+tn,true);
+    const b=r.bulky, h='<div class="card"><b>'+r.tn+'</b><div class="msg">'+(r.state||'Not synced with Bosta yet')+(r.size?' · size '+r.size:'')+'</div>'+
+      (b?'<div class="tag">'+b.size+' · '+b.status+' · '+(b.final||b.expected)+' EGP</div><pre>'+b.items+'</pre>':'')+'</div>';
+    $('res').innerHTML=h+r.photos.map(p=>'<div class="ph card"><img src="'+p.img+'"><div class="msg">'+p.time+(p.note?' · '+p.note:'')+'</div></div>').join('')
+  }).withFailureHandler(fail).getShipment(pin,tn)
+}
+boot();
+</script></body></html>
