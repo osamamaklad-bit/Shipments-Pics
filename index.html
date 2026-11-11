@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><base target="_top"><meta charset="utf-8">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pet Friend Shipments</title><link rel="icon" href="icon-192.png"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#e3031b"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{--bg:#e9fcfd;--ink:#2a1417;--mut:#6b5f62;--card:#fff;--line:#b9ecf1;--acc:#e3031b;--on:#fff;--warn:#9a4a00}
@@ -34,6 +34,12 @@ button{cursor:pointer}button.p{background:var(--acc);border-color:var(--acc);col
 </div>
 <div id="msg" class="msg"></div>
 </div>
+<script>
+const API_URL='https://script.google.com/macros/s/AKfycbxCt3AtTpBYGvVmicXQqvrPXNKkVCU82GdjSPIo5SWBfdD5N9b7wbByvUmCwR_fF6rv/exec';
+function api(fn,args){return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fn,args})}).then(r=>r.json()).then(j=>{if(j.error)throw new Error(j.error);return j.result})}
+const google={script:{get run(){let ok=()=>{},bad=()=>{};const o=new Proxy({},{get:(_,k)=>k==='withSuccessHandler'?f=>(ok=f,o):k==='withFailureHandler'?f=>(bad=f,o):(...a)=>{api(k,a).then(ok).catch(bad)}});return o}}};
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script>
 <script>
 let pin='', photos=[], qr=null; try{pin=localStorage.getItem('pin')||''}catch(e){}
 const $=id=>document.getElementById(id), say=(t,bad)=>{$('msg').textContent=t;$('msg').className='msg'+(bad?' bad':'')};
